@@ -33,20 +33,21 @@ pocket_dep  = 4.5;  // Pocket depth [mm]  (disc protrudes = disc_h - pocket_dep)
 pocket_wall = 5.0;  // Min. wall thickness around pocket [mm] (reference only)
 
 /* [Retention lip] */
-// The lip is a 120° arc ring protruding FORWARD from the adapter face.
-// Centred on the top of the disc opening (+Y direction).
+// 120° arc ring protruding FORWARD from the adapter face, centred on +Y (top of disc).
 // 120° leaves 30° free on each side → easy tilt-in insertion.
 //
-// Disc insertion: tilt disc (bottom/side edges in first),
-//                 rotate flat – top edge slides under the lip.
-// Disc removal:   push bottom edge in to tilt disc, top pops out.
+// Cross-section is a plain rectangle (inner and outer faces square).
+// The lip embeds lip_base mm INTO the adapter body for a solid print bond.
+// A separate quarter-torus fillet smooths the one critical edge:
+//   adapter front face → lip outer face (the "top" surface = lever-arm side).
 //
-// Key constraint: lip_protrude MUST be > disc protrusion (= disc_h − pocket_dep)
-//   so the lip actually overlaps the disc edge axially.
-//   Default: disc protrudes 1.5 mm, lip protrudes 2.5 mm → 1 mm axial overlap.
-lip_w        = 2.5;   // Radial overhang inward from pocket wall [mm] – try 2–3.5
-lip_protrude = 2.5;   // How far lip sticks out from adapter front face [mm]
-lip_chamfer  = 1.2;   // Chamfer size on all lip edges [mm] – smooths entry & look
+// Disc insertion: tilt disc (bottom/side edge first), rotate flat,
+//                 top edge slides under lip.  Disc removal: push bottom to tilt out.
+lip_w        = 2.5;   // Radial overhang inward from pocket wall [mm]
+lip_protrude = 2.5;   // How far lip sticks out BEYOND adapter face [mm]
+                      //   must be > (disc_h − pocket_dep) to capture disc edge
+lip_base     = 1.5;   // How far lip embeds INTO adapter body [mm] – print adhesion
+lip_fillet   = 2.0;   // Fillet radius at adapter-face → lip transition [mm]
 
 /* [Render] */
 $fn = 128;
@@ -80,43 +81,59 @@ module pocket() {
         cylinder(d=pocket_d, h=pocket_dep + 0.01);
 }
 
-// Retention lip – 120° arc ring protruding from the adapter FRONT FACE.
+// Retention lip – 120° arc ring with embedded base and one smooth fillet edge.
 //
-// Built with rotate_extrude(angle=120) so the arc is geometrically clean.
-// Arc centred on local +Y (top of disc): starts at 30°, ends at 150° (from +X).
+// Two rotate_extrude pieces, both rotated 30° so the arc spans 30°→150° (+Y centre):
 //
-// Cross-section (r–z plane) is a chamfered trapezoid:
+//   1. Main body: rectangle cross-section, extends lb below adapter face
+//      (the embedding gives the printer a solid base to print on).
+//      Inner face (disc side) is SQUARE.
+//      Outer face (wall side) is SQUARE.
 //
-//   ri+ch  ro-ch ro
-//      |    /   |
-// lp   |   /   ← outer tip, chamfered
-//      |  /
-// lp-ch ← inner top, chamfered  (disc slides along this face when tilting in)
-//      |    |
-// ch   |    |
-//      \    |  ← inner bottom chamfer → guides disc edge on entry
-// 0     ────|
-//       ri  ro    (outer face is vertical, flush with pocket wall)
+//   2. Fillet: quarter-torus at (r=ro, z=0) filling the concave corner between
+//      the adapter front face and the lip outer face.  This is the only rounded edge.
 //
-// ri = pocket_d/2 − lip_w   (inner radius – disc captured beyond this)
-// ro = pocket_d/2            (outer radius – at pocket wall)
+// Cross-section schematic (r–z plane, local z):
+//
+//  ri       ro  ro+fr
+//  |         |  /
+//  | LIP     | / ← fillet arc (fills this corner)
+//  |         |/
+//  z=0 ──────╯────── adapter body continues at z=0
+//  |         |
+//  z=-lb (embedded in adapter)
+//
+// ri = pocket_d/2 − lip_w   (inner radius)
+// ro = pocket_d/2            (outer radius = pocket wall)
 module retention_lip() {
     ri = pocket_d/2 - lip_w;
     ro = pocket_d/2;
     lp = lip_protrude;
-    ch = lip_chamfer;
+    lb = lip_base;
+    fr = lip_fillet;
 
     translate([0, pocket_y, total_thick])
-        rotate([0, 0, 30])          // shift arc from [0°–120°] → [30°–150°], centred on +Y
+        rotate([0, 0, 30]) {   // centres 120° arc on +Y (top of disc)
+
+            // 1. Main lip body: rectangle, embeds lb into adapter
             rotate_extrude(angle = 120, $fn = $fn)
                 polygon([
-                    [ri + ch, 0   ],  // inner bottom – chamfered (disc entry lead-in)
-                    [ro,      0   ],  // outer bottom
-                    [ro,      lp-ch], // outer face
-                    [ro - ch, lp  ],  // outer tip – chamfered (looks smooth from front)
-                    [ri,      lp-ch], // inner top  – chamfered (disc contact / slide-in surface)
-                    [ri,      ch  ],  // inner face
+                    [ri, -lb],   // inner bottom (inside adapter)
+                    [ro, -lb],   // outer bottom (inside adapter)
+                    [ro,  lp],   // outer top
+                    [ri,  lp],   // inner top   ← SQUARE (disc contact face)
                 ]);
+
+            // 2. Fillet: quarter-torus at the adapter-face / lip-outer-face corner.
+            //    Arc from [ro, fr] down to [ro+fr, 0] fills the concave notch.
+            //    2D polygon: quarter-circle sector at origin, translated to r=ro.
+            rotate_extrude(angle = 120, $fn = $fn)
+                translate([ro, 0])
+                    polygon(concat(
+                        [[0, 0]],
+                        [for (a = [0 : 3 : 90]) [fr * cos(a), fr * sin(a)]]
+                    ));
+        }
 }
 
 // === Assembly ===
