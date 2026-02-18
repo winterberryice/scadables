@@ -3,57 +3,59 @@
 // ==========================================
 //
 // Problem:  small adhesive area → hook detaches from tile
-// Solution: large stadium-shaped base plate with snap-fit groove
-//           for the round hook disc
+// Solution: large stadium-shaped base plate with:
+//           - circular pocket  → locates the hook disc (no glue)
+//           - retention lip    → holds disc against peel force
+//                                without any adhesive on the disc
 //
-// Orientation: Y = up/down, X = left/right, Z = thickness
-// Groove at the BOTTOM → adhesive above the groove has a longer
-//   lever arm to resist the peel moment (weight on hook tries
-//   to pull the top of the plate away from the tile)
+// Orientation: Y = up/down, X = left/right, Z = thickness (into wall)
+// Pocket at BOTTOM of stadium → adhesive above has maximum lever arm
 //
-// Print: flat on bed, groove facing up (Z+)
-// Mount: flat back side glued to tile,
-//        hook disc pressed into groove from the front (snaps in)
+// Print: flat on bed, pocket opening facing up (Z+)
+// Mount: flat back glued to tile
+// Disc insertion: tilt disc (bottom edge in first), rotate flat –
+//                 top edge slides under the lip and is retained
+// Disc removal:   push up on bottom edge to tilt out
 // ==========================================
 
 /* [Hook disc] */
 disc_d = 50;   // Disc diameter [mm]
-disc_h = 6;    // Disc thickness [mm] (informational only)
+disc_h = 6;    // Disc thickness [mm] (informational – disc will protrude ~1.5 mm)
 
 /* [Base plate shape] */
-// Stadium: two semicircles (top + bottom) joined by a rectangle, vertical Y axis
-base_r     = 32;   // Semicircle radius [mm]  (must be >= disc_d/2 + groove_wall)
-base_len   = 45;   // Distance between semicircle centers (straight section) [mm]
+base_r     = 32;   // Semicircle radius [mm]  (must be >= disc_d/2 + pocket_wall)
+base_len   = 45;   // Straight section length between semicircle centres [mm]
 base_thick = 3.5;  // Back wall thickness (against tile) [mm]
 
-/* [Snap-fit groove] */
-groove_clr  = 0.4;  // Groove clearance – 0=friction only, 0.4=normal snap [mm]
-groove_dep  = 4.5;  // Groove depth [mm]
-groove_wall = 5.0;  // Min. wall thickness around groove [mm]
+/* [Locating pocket] */
+pocket_clr  = 0.4;  // Pocket clearance – disc slides in freely [mm]
+pocket_dep  = 4.5;  // Pocket depth [mm]  (disc protrudes = disc_h - pocket_dep)
+pocket_wall = 5.0;  // Min. wall thickness around pocket [mm] (reference only)
 
-snap_h   = 1.2;  // Snap tooth height [mm]
-snap_lip = 0.6;  // Snap tooth protrusion – smaller = easier to press in [mm]
-
-// Groove Y position:
-//   0          = centre of stadium
-//  -base_len/2 = centre of bottom semicircle (maximum lever arm above)
-groove_y = -base_len/2;
+/* [Retention lip] */
+// The lip is a half-ring of material on the UPPER side of the pocket opening.
+// It overhangs the disc edge so the disc cannot pull straight out.
+// Disc must be tilted to insert / remove (see mount instructions above).
+lip_w = 2.5;   // Lip overhang over disc edge [mm]  – larger = stronger hold,
+               //   harder to insert. Try 2.0–3.5 mm.
 
 /* [Render] */
 $fn = 128;
 
-// === Derived values ===
-groove_d    = disc_d + 2 * groove_clr;
-total_thick = base_thick + groove_dep;
+// === Derived ===
+pocket_d    = disc_d + 2 * pocket_clr;
+total_thick = base_thick + pocket_dep;
+pocket_y    = -base_len / 2;   // centre of bottom semicircle
 
-_wall_at_groove = base_r - groove_d/2;
-echo(str("Overall dimensions: ", 2*base_r, " x ", 2*base_r + base_len, " x ", total_thick, " mm"));
-echo(str("Groove dia: ", groove_d, " mm  |  wall: ", _wall_at_groove, " mm  (min: ", groove_wall, " mm)"));
-echo(str("Groove Y offset: ", groove_y, " mm from centre"));
+_wall = base_r - pocket_d / 2;
+echo(str("Overall: ", 2*base_r, " x ", 2*base_r+base_len, " x ", total_thick, " mm"));
+echo(str("Pocket dia: ", pocket_d, " mm  |  wall: ", _wall, " mm"));
+echo(str("Lip inner dia: ", pocket_d - 2*lip_w, " mm  (disc: ", disc_d, " mm → overhang: ", lip_w - pocket_clr, " mm per side)"));
+echo(str("Disc protrusion: ", disc_h - pocket_dep, " mm"));
 
 // === Modules ===
 
-// Stadium shape – vertical (long axis = Y)
+// Stadium body – vertical orientation (long axis = Y)
 module stadium(r, len, h) {
     hull() {
         translate([0,  len/2, 0]) cylinder(r=r, h=h);
@@ -61,32 +63,35 @@ module stadium(r, len, h) {
     }
 }
 
-// Snap-fit groove centred at (cx, cy):
-//   - main pocket: disc sits here with clearance
-//   - snap tooth at the opening: converging cone → narrow ring → diverging cone
-//     disc compresses the walls slightly as it passes and clicks into the pocket
-module snap_groove(cx, cy) {
-    translate([cx, cy, base_thick]) {
+// Cylindrical locating pocket – plain hole, no snap-fit
+module pocket() {
+    translate([0, pocket_y, base_thick])
+        cylinder(d=pocket_d, h=pocket_dep + 0.01);
+}
 
-        // Main pocket
-        cylinder(d=groove_d, h=groove_dep + 0.01);
-
-        // Snap tooth at opening (Z = total_thick)
-        // Profile: ↘ narrowest ↗  (saw-tooth cross-section)
-        translate([0, 0, groove_dep - 2*snap_h]) {
-            cylinder(d1=groove_d,
-                     d2=groove_d - 2*snap_lip,
-                     h=snap_h);
-            translate([0, 0, snap_h])
-                cylinder(d1=groove_d - 2*snap_lip,
-                         d2=groove_d,
-                         h=snap_h);
+// Retention lip – upper half-ring inside the pocket.
+// Added back after the pocket is subtracted from the body.
+// Covers 180° on the high-Y (upper) side of the pocket.
+module retention_lip() {
+    translate([0, pocket_y, base_thick]) {
+        intersection() {
+            // Full-depth ring, lip_w wide
+            difference() {
+                cylinder(d=pocket_d,           h=pocket_dep);
+                cylinder(d=pocket_d - 2*lip_w, h=pocket_dep + 0.01);
+            }
+            // Mask: upper half only (local Y ≥ 0 = high-Y side)
+            translate([-pocket_d, 0, -0.01])
+                cube([2*pocket_d, pocket_d, pocket_dep + 0.02]);
         }
     }
 }
 
 // === Assembly ===
-difference() {
-    stadium(base_r, base_len, total_thick);
-    snap_groove(0, groove_y);
+union() {
+    difference() {
+        stadium(base_r, base_len, total_thick);
+        pocket();
+    }
+    retention_lip();
 }
