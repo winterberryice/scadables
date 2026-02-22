@@ -127,6 +127,13 @@ module retention_lip() {
                 ]);
 }
 
+// === Test disc (transparent) ===
+// Disc sitting in pocket, bottom flush with pocket floor
+module test_disc() {
+    translate([0, pocket_y, base_thick])
+        cylinder(d=disc_d, h=disc_h);
+}
+
 // === Assembly ===
 union() {
     difference() {
@@ -135,3 +142,6 @@ union() {
     }
     retention_lip();
 }
+
+// Show disc as transparent overlay to check for intersections
+%test_disc();
