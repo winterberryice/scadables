@@ -62,6 +62,7 @@ lip_flange_w = 5;     // Flange width extending OVER adapter face [mm]
                       //   larger = more contact area with adapter, stronger print bond
 lip_flange_h = 1.2;   // Flange thickness / height of slope start [mm]
                       //   slope runs from [ro+fw, fh] diagonally to [ro, lp]
+lip_fillet   = 1.5;   // Fillet radius on outer slope corners [mm]
 
 /* [Render] */
 $fn = 128;
@@ -105,26 +106,51 @@ module pocket() {
 //   [ro,    lp ]  outer top of main lip  <- slope from [ro+fw,fh] to here
 //   [ri,    lp ]  inner top              <- SQUARE (disc retention face)
 //
+// Generate fillet arc points between two edges meeting at a corner.
+// p0 = previous point, p1 = corner, p2 = next point, r = radius, n = segments
+function _unit(v) = v / norm(v);
+function fillet_arc(p0, p1, p2, r, n=8) =
+    let(
+        v1 = _unit(p0 - p1),
+        v2 = _unit(p2 - p1),
+        half_a = acos(v1 * v2) / 2,
+        d  = r / tan(half_a),
+        t1 = p1 + v1 * d,
+        t2 = p1 + v2 * d,
+        bis = _unit(v1 + v2),
+        center = p1 + bis * (r / sin(half_a)),
+        sa  = atan2(t1.y - center.y, t1.x - center.x),
+        ea  = atan2(t2.y - center.y, t2.x - center.x),
+        raw = ea - sa,
+        sweep = raw > 180 ? raw - 360 : (raw < -180 ? raw + 360 : raw)
+    )
+    [for (i = [0:n]) let(a = sa + sweep * i / n) center + r * [cos(a), sin(a)]];
+
 module retention_lip() {
     ri = pocket_d/2 - lip_w;
     ro = pocket_d/2;
     lp = lip_protrude;
     fw = lip_flange_w;
     fh = lip_flange_h;
+    r  = lip_fillet;
+
+    // Key points
+    P1 = [ro+fw, 0 ];   // flange outer bottom
+    P2 = [ro+fw, fh];   // flange outer top  (FILLET here)
+    P3 = [ro,    lp];   // slope top          (FILLET here)
+
+    profile = concat(
+        [[ri, 0]],                          // inner bottom  - SHARP
+        [P1],                               // flange bottom - sharp
+        fillet_arc(P1, P2, P3, r),          // rounded bottom of slope
+        fillet_arc(P2, P3, [ri, lp], r),    // rounded top of slope
+        [[ri, lp]]                          // inner top     - SHARP
+    );
 
     translate([0, pocket_y, total_thick])
-        rotate([0, 0, 30])          // centres 120 deg arc on +Y
+        rotate([0, 0, 30])
             rotate_extrude(angle = 120, $fn = $fn)
-                polygon([
-                    [ri,    0 ],    // inner bottom: SQUARE, flush with adapter face
-                                    //   disc contact starts here
-                    [ro+fw, 0 ],    // flange outer bottom: sits ON adapter face
-                                    //   -> large contact surface for the printer
-                    [ro+fw, fh],    // flange outer top: start of slope
-                    [ro,    lp],    // outer lip top: slope ends here
-                                    //   smooth diagonal = natural easing
-                    [ri,    lp],    // inner top: SQUARE, retains disc
-                ]);
+                polygon(profile);
 }
 
 // === Front taper (upper section) ===
