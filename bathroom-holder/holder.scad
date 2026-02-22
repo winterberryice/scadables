@@ -127,6 +127,24 @@ module retention_lip() {
                 ]);
 }
 
+// === Front taper (upper section) ===
+// Ramps from full thickness at pocket top edge down to base_thick at adapter top.
+// Saves material where it's just adhesive surface anyway.
+module front_taper() {
+    ramp_y0 = pocket_y + pocket_d/2 + lip_flange_w + 1;  // above lip flange + margin
+    ramp_y1 = base_len/2 + base_r + 1;       // top of stadium + margin
+    w       = 2 * base_r + 2;
+
+    translate([-(base_r + 1), 0, 0])
+        rotate([90, 0, 90])
+            linear_extrude(height = w)
+                polygon([
+                    [ramp_y0, total_thick + 0.01],
+                    [ramp_y1, total_thick + 0.01],
+                    [ramp_y1, base_thick],
+                ]);
+}
+
 // === Test disc (transparent) ===
 // Disc sitting in pocket, bottom flush with pocket floor
 module test_disc() {
@@ -139,6 +157,7 @@ union() {
     difference() {
         stadium(base_r, base_len, total_thick);
         pocket();
+        front_taper();
     }
     retention_lip();
 }
