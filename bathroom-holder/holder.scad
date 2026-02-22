@@ -106,25 +106,21 @@ module pocket() {
 //   [ro,    lp ]  outer top of main lip  <- slope from [ro+fw,fh] to here
 //   [ri,    lp ]  inner top              <- SQUARE (disc retention face)
 //
-// Generate fillet arc points between two edges meeting at a corner.
-// p0 = previous point, p1 = corner, p2 = next point, r = radius, n = segments
-function _unit(v) = v / norm(v);
-function fillet_arc(p0, p1, p2, r, n=8) =
-    let(
-        v1 = _unit(p0 - p1),
-        v2 = _unit(p2 - p1),
-        half_a = acos(v1 * v2) / 2,
-        d  = r / tan(half_a),
-        t1 = p1 + v1 * d,
-        t2 = p1 + v2 * d,
-        bis = _unit(v1 + v2),
-        center = p1 + bis * (r / sin(half_a)),
-        sa  = atan2(t1.y - center.y, t1.x - center.x),
-        ea  = atan2(t2.y - center.y, t2.x - center.x),
-        raw = ea - sa,
-        sweep = raw > 180 ? raw - 360 : (raw < -180 ? raw + 360 : raw)
-    )
-    [for (i = [0:n]) let(a = sa + sweep * i / n) center + r * [cos(a), sin(a)]];
+// Cubic Bézier curve: B(t) = (1-t)³·P0 + 3(1-t)²t·P1 + 3(1-t)t²·P2 + t³·P3
+// P0 = start point, P1 = first control point, P2 = second control point, P3 = end point
+// n = number of segments
+function bezier_curve(P0, P1, P2, P3, n=16) =
+    [for (i = [0:n])
+        let(
+            t = i / n,
+            t1 = 1 - t,
+            b0 = t1 * t1 * t1,
+            b1 = 3 * t1 * t1 * t,
+            b2 = 3 * t1 * t * t,
+            b3 = t * t * t
+        )
+        b0 * P0 + b1 * P1 + b2 * P2 + b3 * P3
+    ];
 
 module retention_lip() {
     ri = pocket_d/2 - lip_w;
@@ -132,19 +128,32 @@ module retention_lip() {
     lp = lip_protrude;
     fw = lip_flange_w;
     fh = lip_flange_h;
-    r  = lip_fillet;
 
-    // Key points
-    P1 = [ro+fw, 0 ];   // flange outer bottom
-    P2 = [ro+fw, fh];   // flange outer top  (FILLET here)
-    P3 = [ro,    lp];   // slope top          (FILLET here)
+    // Trójkątny profil w przestrzeni [r, z]:
+    // Lewy dolny:  [ri, 0]
+    // Lewy górny:  [ri, lp]
+    // Prawy dolny: [ro+fw, 0]
+    //
+    // Krzywa Béziera zastępuje bok od [ri, lp] do [ro+fw, 0]
+    //
+    // Mapowanie z Twojego przykładu [0,10]→[15,10]→[15,0]→[20,0]:
+    // [0, 10]  → [ri, lp]        start (lewy górny)
+    // [15, 10] → [ri + 0.75*(ro+fw-ri), lp]   kontrolny 1 (wysoko, 75% w prawo)
+    // [15, 0]  → [ri + 0.75*(ro+fw-ri), 0]    kontrolny 2 (nisko, 75% w prawo)
+    // [20, 0]  → [ro+fw, 0]      koniec (prawy dolny)
+
+    P0 = [ri, lp];                              // start
+    P1 = [ri + 0.75*(ro+fw-ri), lp];           // kontrolny 1 (wysoko)
+    P2 = [ri + 0.75*(ro+fw-ri), 0];            // kontrolny 2 (nisko)
+    P3 = [ro+fw, 0];                            // koniec
+
+    ski_jump = bezier_curve(P0, P1, P2, P3, n=20);
 
     profile = concat(
-        [[ri, 0]],                          // inner bottom  - SHARP
-        [P1],                               // flange bottom - sharp
-        fillet_arc(P1, P2, P3, r),          // rounded bottom of slope
-        fillet_arc(P2, P3, [ri, lp], r),    // rounded top of slope
-        [[ri, lp]]                          // inner top     - SHARP
+        [[ri, 0]],          // left bottom - vertical edge
+        [[ro+fw, 0]],       // right bottom
+        ski_jump,           // Bézier ski-jump curve (diagonal replacement)
+        [[ri, lp]]          // left top - closes shape
     );
 
     translate([0, pocket_y, total_thick])
