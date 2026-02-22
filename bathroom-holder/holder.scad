@@ -55,10 +55,10 @@ pocket_dep  = disc_h;  // Pocket depth [mm] - full disc thickness, flush with su
 //
 // Inner face (ri): SQUARE - disc slides against this when inserting/removing
 // Inner top (lp): SQUARE - retains disc against pull-out
-lip_w        = 2.5;   // Radial overhang of lip over disc edge [mm]
-lip_protrude = 2.5;   // Height of lip above adapter face [mm]
-                      //   must be > (disc_h - pocket_dep) = 1.5 mm to capture disc
-lip_flange_w = 3.5;   // Flange width extending OVER adapter face [mm]
+lip_w        = 4;     // Radial overhang of lip over disc edge [mm]
+lip_protrude = 3;     // Height of lip above adapter face [mm]
+                      //   must be > (disc_h - pocket_dep) to capture disc
+lip_flange_w = 5;     // Flange width extending OVER adapter face [mm]
                       //   larger = more contact area with adapter, stronger print bond
 lip_flange_h = 1.2;   // Flange thickness / height of slope start [mm]
                       //   slope runs from [ro+fw, fh] diagonally to [ro, lp]
