@@ -28,7 +28,7 @@ base_thick = 3.5;  // Back wall thickness (against tile) [mm]
 
 /* [Locating pocket] */
 pocket_clr  = 0.4;  // Pocket clearance [mm]
-pocket_dep  = 4.5;  // Pocket depth [mm]
+pocket_dep  = disc_h;  // Pocket depth [mm] - full disc thickness, flush with surface
 
 /* [Retention lip] */
 // The lip is a 120 deg arc ring (centred on +Y = top of disc opening).
